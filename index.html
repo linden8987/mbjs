@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Marble Blast: Full HTML Edition</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.6); pointer-events: none; }
+        #msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #FFD700; font-size: 3.5rem; font-weight: bold; display: none; text-shadow: 0 0 10px rgba(0,0,0,0.5); }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <h1>Marble Blast JS</h1>
+        <p>WASD/Arrows to Roll | SPACE to Jump</p>
+        <p id="status">Audio: Ready (Click anywhere to enable)</p>
+    </div>
+    <div id="msg">OUT OF BOUNDS!</div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- 1. SOUND DATA (Base64) ---
+        // Replace the placeholder strings below with actual Base64 from official WAV files.
+        const soundData = {
+            jump: "data:audio/wav;base64,UklGR...", // Paste official Jump.wav Base64 here
+            bounce: "data:audio/wav;base64,UklGR...", // Paste official Bounce.wav Base64 here
+            fall: "data:audio/wav;base64,UklGR..."    // Paste official Falling.wav Base64 here
+        };
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Audio Setup
+        const listener = new THREE.AudioListener();
+        camera.add(listener);
+        const jumpSound = new THREE.Audio(listener);
+        const bounceSound = new THREE.Audio(listener);
+        const fallSound = new THREE.Audio(listener);
+        const audioLoader = new THREE.AudioLoader();
+
+        // Load Base64 Strings into Audio Buffers
+        const loadSound = (data, target) => {
+            if (data.length > 50) { // Check if string is actually pasted
+                audioLoader.load(data, (buffer) => target.setBuffer(buffer));
+            }
+        };
+        loadSound(soundData.jump, jumpSound);
+        loadSound(soundData.bounce, bounceSound);
+        loadSound(soundData.fall, fallSound);
+
+        // Lighting
+        const light = new THREE.DirectionalLight(0xffffff, 1.2);
+        light.position.set(10, 20, 10);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0x606060));
+
+        // Objects
+        const marble = new THREE.Mesh(
+            new THREE.SphereGeometry(0.5, 32, 32),
+            new THREE.MeshPhongMaterial({ color: 0xff3333, shininess: 100 })
+        );
+        marble.position.y = 2;
+        scene.add(marble);
+
+        const platform = new THREE.Mesh(
+            new THREE.BoxGeometry(20, 1, 60),
+            new THREE.MeshPhongMaterial({ color: 0x444444 })
+        );
+        platform.position.y = -0.5;
+        scene.add(platform);
+
+        // Physics Logic
+        let velocity = new THREE.Vector3();
+        const keys = {};
+        let canJump = true;
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (THREE.AudioContext.getContext().state === 'suspended') {
+                THREE.AudioContext.getContext().resume();
+                document.getElementById('status').innerText = "Audio: Active";
+            }
+        });
+        window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (keys['ArrowUp'] || keys['KeyW']) velocity.z -= 0.04;
+            if (keys['ArrowDown'] || keys['KeyS']) velocity.z += 0.04;
+            if (keys['ArrowLeft'] || keys['KeyA']) velocity.x -= 0.04;
+            if (keys['ArrowRight'] || keys['KeyD']) velocity.x += 0.04;
+            
+            if (keys['Space'] && canJump) {
+                velocity.y = 0.22;
+                canJump = false;
+                if (jumpSound.buffer) jumpSound.play();
+            }
+
+            velocity.y -= 0.01; // Gravity
+            velocity.x *= 0.96; // Friction
+            velocity.z *= 0.96;
+            marble.position.add(velocity);
+
+            // Ground Collision
+            if (marble.position.y < 0.5 && Math.abs(marble.position.x) < 10 && Math.abs(marble.position.z) < 30) {
+                if (velocity.y < -0.1 && bounceSound.buffer) bounceSound.play();
+                marble.position.y = 0.5;
+                velocity.y = 0;
+                canJump = true;
+            }
+
+            // Reset
+            if (marble.position.y < -15) {
+                if (fallSound.buffer && !fallSound.isPlaying) fallSound.play();
+                document.getElementById('msg').style.display = 'block';
+                setTimeout(() => {
+                    marble.position.set(0, 5, 0);
+                    velocity.set(0,0,0);
+                    document.getElementById('msg').style.display = 'none';
+                }, 1500);
+            }
+
+            camera.position.set(marble.position.x, marble.position.y + 4, marble.position.z + 10);
+            camera.lookAt(marble.position);
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
